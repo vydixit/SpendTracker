@@ -76,23 +76,28 @@ class StatementParser {
     }
 
     detectCurrency(text) {
-        // Check for currency symbols first
-        for (const [sym, code] of Object.entries(this.currencySymbols)) {
-            if (text.includes(sym)) {
-                this.detectedCurrency = code;
-                return;
-            }
+        // Unique symbols that can't appear as substrings of normal words
+        const safeSymbols = { '₹': 'INR', '€': 'EUR', '£': 'GBP', '¥': 'JPY', '₩': 'KRW', '₪': 'ILS', '₫': 'VND', '₱': 'PHP', '₺': 'TRY', 'zł': 'PLN', 'Kč': 'CZK', 'Ft': 'HUF' };
+        for (const [sym, code] of Object.entries(safeSymbols)) {
+            if (text.includes(sym)) { this.detectedCurrency = code; return; }
         }
-        // Check for currency codes
+        // Multi-char prefixed symbols (must appear before a digit to count)
+        const prefixedSymbols = [['R$', 'BRL'], ['HK$', 'HKD'], ['NZ$', 'NZD'], ['A$', 'AUD'], ['C$', 'CAD'], ['S$', 'SGD'], ['RM', 'MYR'], ['Fr', 'CHF'], ['kr', 'SEK'], ['R ', 'ZAR']];
+        for (const [sym, code] of prefixedSymbols) {
+            const pat = new RegExp(sym.replace('$', '\\$') + '\\s?\\d', 'i');
+            if (pat.test(text)) { this.detectedCurrency = code; return; }
+        }
+        // Bare $ — only if no prefixed variant matched
+        if (/\$\s?\d/.test(text)) { this.detectedCurrency = 'USD'; return; }
+        // Check for currency codes by frequency
         const codePattern = new RegExp('\\b(' + this.currencyCodes.join('|') + ')\\b', 'g');
         const matches = text.match(codePattern);
         if (matches && matches.length > 0) {
-            // Pick the most frequent code
             const freq = {};
             matches.forEach(m => freq[m] = (freq[m] || 0) + 1);
             this.detectedCurrency = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
         }
-        if (!this.detectedCurrency) this.detectedCurrency = 'USD'; // default fallback
+        if (!this.detectedCurrency) this.detectedCurrency = 'USD';
     }
 
     parseTransactionSegment(segment) {
