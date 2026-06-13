@@ -84,7 +84,9 @@ class StatementParser {
         // Rs / Rs. — common Indian statement rendering (pdf.js often can't extract ₹ glyph)
         if (/\bRs\.?\s?\d/.test(text)) { this.detectedCurrency = 'INR'; return; }
         // Multi-char prefixed symbols (must appear before a digit to count)
-        const prefixedSymbols = [['R$', 'BRL'], ['HK$', 'HKD'], ['NZ$', 'NZD'], ['A$', 'AUD'], ['C$', 'CAD'], ['S$', 'SGD'], ['RM', 'MYR'], ['Fr', 'CHF'], ['kr', 'SEK'], ['R ', 'ZAR']];
+        // Note: 'R' alone for ZAR is too ambiguous (matches "UBER 1", "TRANSFER 5", etc.)
+        // ZAR is detected via ISO code frequency check below instead
+        const prefixedSymbols = [['R$', 'BRL'], ['HK$', 'HKD'], ['NZ$', 'NZD'], ['A$', 'AUD'], ['C$', 'CAD'], ['S$', 'SGD'], ['RM', 'MYR'], ['Fr', 'CHF'], ['kr', 'SEK']];
         for (const [sym, code] of prefixedSymbols) {
             const pat = new RegExp(sym.replace('$', '\\$') + '\\s?\\d', 'i');
             if (pat.test(text)) { this.detectedCurrency = code; return; }
