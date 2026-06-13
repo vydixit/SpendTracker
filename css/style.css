@@ -137,6 +137,62 @@ body {
     color: var(--text-light);
 }
 
+/* Features Grid */
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    max-width: 960px;
+    width: 100%;
+    margin-top: 32px;
+}
+.feature-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.feature-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+}
+.feature-icon {
+    font-size: 2rem;
+    display: block;
+    margin-bottom: 8px;
+}
+.feature-card h4 {
+    margin: 0 0 6px;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+.feature-card p {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+/* Currency Tip */
+.currency-tip {
+    max-width: 700px;
+    width: 100%;
+    margin-top: 24px;
+    padding: 12px 18px;
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    color: #92400e;
+    line-height: 1.5;
+    text-align: left;
+}
+.tip-icon {
+    margin-right: 6px;
+}
+
 /* Saved Dashboards */
 .saved-section {
     margin-top: 30px;
