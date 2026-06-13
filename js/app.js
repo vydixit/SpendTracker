@@ -162,6 +162,12 @@ const app = {
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('dashboard').classList.remove('hidden');
 
+        // Set currency selector to detected value
+        const sel = document.getElementById('currency-override');
+        if (sel && !this.currencyOverride) {
+            sel.value = '';
+        }
+
         this.updateSummary();
         this.renderCharts();
         this.updateBigTransactions();
@@ -1130,8 +1136,28 @@ const app = {
         }
     },
 
+    currencyOverride: null,
+
     getCurrency() {
+        if (this.currencyOverride) return this.currencyOverride;
         return (this.transactions.length > 0 && this.transactions[0].currency) || 'USD';
+    },
+
+    overrideCurrency(code) {
+        this.currencyOverride = code || null;
+        if (this.transactions.length > 0) {
+            this.updateSummary();
+            this.destroyCharts();
+            this.renderCharts();
+            this.updateBigTransactions();
+            this.renderRefunds();
+            this.renderTable();
+        }
+    },
+
+    destroyCharts() {
+        Object.values(this.charts).forEach(c => { if (c) c.destroy(); });
+        this.charts = {};
     },
 
     fmtAmt(amount) {

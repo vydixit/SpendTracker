@@ -223,6 +223,29 @@ body {
     flex-wrap: wrap;
 }
 
+.currency-selector {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+.currency-selector select {
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.currency-selector select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(79,70,229,0.2);
+}
+
 .save-status {
     font-size: 0.85rem;
     color: var(--success);
