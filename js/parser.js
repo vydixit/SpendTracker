@@ -81,6 +81,8 @@ class StatementParser {
         for (const [sym, code] of Object.entries(safeSymbols)) {
             if (text.includes(sym)) { this.detectedCurrency = code; return; }
         }
+        // Rs / Rs. — common Indian statement rendering (pdf.js often can't extract ₹ glyph)
+        if (/\bRs\.?\s?\d/.test(text)) { this.detectedCurrency = 'INR'; return; }
         // Multi-char prefixed symbols (must appear before a digit to count)
         const prefixedSymbols = [['R$', 'BRL'], ['HK$', 'HKD'], ['NZ$', 'NZD'], ['A$', 'AUD'], ['C$', 'CAD'], ['S$', 'SGD'], ['RM', 'MYR'], ['Fr', 'CHF'], ['kr', 'SEK'], ['R ', 'ZAR']];
         for (const [sym, code] of prefixedSymbols) {
@@ -180,16 +182,14 @@ class StatementParser {
         // Remove date from segment
         let rest = segment.substring(dateLen).trim();
 
-        // Skip header rows and non-transaction content
-        if (rest.includes('TRANSACTION DETAILS') || rest.includes('Card Number') || 
-            rest.includes('Ref. Number') || rest.includes('category of service') ||
-            rest.includes('REGISTERED OFFICE') || rest.includes('Statement Period') ||
-            rest.includes('Opening Balance') || rest.includes('Closing Balance') ||
-            rest.includes('Payment Due') || rest.includes('Total Due') ||
-            rest.includes('Reward Points') || rest.includes('Page ') ||
-            rest.includes('Minimum Payment') || rest.includes('Credit Limit') ||
-            rest.includes('Available Balance') || rest.includes('Previous Balance') ||
-            rest.includes('New Balance') || rest.includes('Account Summary')) {
+        // Skip header rows — only match when the line IS a header, not a merchant name
+        const restUp = rest.toUpperCase();
+        if (restUp.startsWith('TRANSACTION DETAILS') || restUp.startsWith('CARD NUMBER') ||
+            restUp.startsWith('REF. NUMBER') || restUp.startsWith('REGISTERED OFFICE') ||
+            restUp.startsWith('STATEMENT PERIOD') || restUp.startsWith('ACCOUNT SUMMARY') ||
+            /^(OPENING|CLOSING|PREVIOUS|NEW|AVAILABLE)\s+(BALANCE|CREDIT)/i.test(rest) ||
+            /^(PAYMENT DUE|TOTAL DUE|REWARD POINTS|MINIMUM PAYMENT|CREDIT LIMIT|PAGE \d)/i.test(rest) ||
+            rest.includes('category of service')) {
             return null;
         }
 

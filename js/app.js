@@ -86,16 +86,21 @@ const app = {
                 allTxns = allTxns.concat(txns);
             }
 
-            // Deduplicate by date+description+amount (same txn across overlapping statements)
-            const seen = new Set();
-            const deduped = [];
-            allTxns.forEach(t => {
-                const key = t.dateStr + '|' + t.description + '|' + t.amount + '|' + (t.isCredit ? 'cr' : 'dr');
-                if (!seen.has(key)) {
-                    seen.add(key);
-                    deduped.push(t);
-                }
-            });
+            // Deduplicate only when merging multiple files (overlapping statement periods)
+            let deduped;
+            if (files.length > 1) {
+                const seen = new Set();
+                deduped = [];
+                allTxns.forEach(t => {
+                    const key = t.dateStr + '|' + t.description + '|' + t.amount + '|' + (t.isCredit ? 'cr' : 'dr');
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        deduped.push(t);
+                    }
+                });
+            } else {
+                deduped = allTxns;
+            }
 
             // Sort by date
             deduped.sort((a, b) => a.date - b.date);
@@ -434,9 +439,10 @@ const app = {
         const big = this.sortRows(bigFiltered, this.sortState.big.col, this.sortState.big.dir);
 
         const container = document.getElementById('big-transactions');
-        container.innerHTML = `<table><thead><tr>${this.sortHeader('big','date','Date')}${this.sortHeader('big','description','Description')}${this.sortHeader('big','category','Category')}${this.sortHeader('big','amount','Amount')}${this.sortHeader('big','tag','Tag')}<th>Note</th></tr></thead><tbody>` +
-            big.map(t => `
+        container.innerHTML = `<table><thead><tr><th>#</th>${this.sortHeader('big','date','Date')}${this.sortHeader('big','description','Description')}${this.sortHeader('big','category','Category')}${this.sortHeader('big','amount','Amount')}${this.sortHeader('big','tag','Tag')}<th>Note</th></tr></thead><tbody>` +
+            big.map((t, i) => `
             <tr>
+                <td style="color:#94a3b8;font-size:0.8rem">${i + 1}</td>
                 <td>${t.dateStr}</td>
                 <td>${t.description}</td>
                 <td>${t.category}</td>
@@ -488,9 +494,10 @@ const app = {
     renderTable() {
         const sorted = this.sortRows(this.filteredTransactions, this.sortState.all.col, this.sortState.all.dir);
         const container = document.getElementById('transactions-table');
-        container.innerHTML = `<table><thead><tr>${this.sortHeader('all','date','Date')}${this.sortHeader('all','description','Description')}${this.sortHeader('all','category','Category')}${this.sortHeader('all','amount','Amount')}<th>Currency</th>${this.sortHeader('all','tag','Tag')}<th>Note</th></tr></thead><tbody>` +
-            sorted.map(t => `
+        container.innerHTML = `<table><thead><tr><th>#</th>${this.sortHeader('all','date','Date')}${this.sortHeader('all','description','Description')}${this.sortHeader('all','category','Category')}${this.sortHeader('all','amount','Amount')}<th>Currency</th>${this.sortHeader('all','tag','Tag')}<th>Note</th></tr></thead><tbody>` +
+            sorted.map((t, i) => `
             <tr>
+                <td style="color:#94a3b8;font-size:0.8rem">${i + 1}</td>
                 <td>${t.dateStr}</td>
                 <td>${t.description}</td>
                 <td>${t.category}</td>
@@ -529,9 +536,10 @@ const app = {
             container.innerHTML = '<p style="color:#64748b;">No refunds/credits found in this statement.</p>';
             return;
         }
-        container.innerHTML = `<table><thead><tr>${this.sortHeader('refunds','date','Date')}${this.sortHeader('refunds','description','Description')}${this.sortHeader('refunds','category','Category')}${this.sortHeader('refunds','amount','Amount')}${this.sortHeader('refunds','tag','Tag')}<th>Note</th></tr></thead><tbody>` +
-            refunds.map(t => `
+        container.innerHTML = `<table><thead><tr><th>#</th>${this.sortHeader('refunds','date','Date')}${this.sortHeader('refunds','description','Description')}${this.sortHeader('refunds','category','Category')}${this.sortHeader('refunds','amount','Amount')}${this.sortHeader('refunds','tag','Tag')}<th>Note</th></tr></thead><tbody>` +
+            refunds.map((t, i) => `
             <tr>
+                <td style="color:#94a3b8;font-size:0.8rem">${i + 1}</td>
                 <td>${t.dateStr}</td>
                 <td>${t.description}</td>
                 <td>${t.category}</td>
