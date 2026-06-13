@@ -7,7 +7,7 @@
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
     <meta http-equiv="Referrer-Policy" content="no-referrer">
     <title>SpendTracker - Credit Card Statement Analyzer</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=9">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -19,50 +19,78 @@
                 <span class="logo-icon">&#128176;</span>
                 <h1>SpendTracker</h1>
             </div>
-            <p class="tagline">Upload your credit card statement and get instant spending insights</p>
+            <p class="tagline">Your personal credit card statement analyzer — private, instant, and free</p>
             <button class="btn-close-app" onclick="app.closeApp()" title="Close SpendTracker">&#10005;</button>
         </header>
 
         <!-- Upload Section -->
         <section id="upload-section" class="upload-section">
-            <div class="upload-box" id="drop-zone">
-                <div class="upload-icon">&#128196;</div>
-                <h2>Drop your PDF statement(s) here</h2>
-                <p>or click to browse — select one or multiple files</p>
-                <input type="file" id="file-input" accept=".pdf,.csv" multiple hidden>
-                <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
-                    Choose File(s)
-                </button>
-                <p class="upload-note">Works with credit card statements from any bank worldwide (PDF/CSV). Upload multiple months at once!</p>
+            <!-- Hero Upload -->
+            <div class="hero-area">
+                <div class="upload-box" id="drop-zone">
+                    <div class="upload-icon-wrapper">
+                        <div class="upload-icon-bg"></div>
+                        <span class="upload-icon">&#128196;</span>
+                    </div>
+                    <h2>Drop your statement here</h2>
+                    <p>PDF or CSV from any bank, any country</p>
+                    <input type="file" id="file-input" accept=".pdf,.csv" multiple hidden>
+                    <button class="btn btn-primary btn-upload-main" onclick="document.getElementById('file-input').click()">
+                        &#128194; Choose File(s)
+                    </button>
+                    <p class="upload-note">Upload one or multiple months at once</p>
+                </div>
             </div>
 
-            <!-- Features Grid -->
+            <!-- Features -->
             <div class="features-grid">
-                <div class="feature-card">
-                    <span class="feature-icon">&#128274;</span>
+                <div class="feature-card feature-privacy">
+                    <div class="feature-icon-wrap"><span>&#128274;</span></div>
                     <h4>100% Private</h4>
-                    <p>Your data never leaves your browser. No uploads to any server — everything runs locally.</p>
+                    <p>Your data never leaves your browser. Zero server uploads — everything processes locally on your device.</p>
                 </div>
-                <div class="feature-card">
-                    <span class="feature-icon">&#127758;</span>
-                    <h4>Any Bank, Any Country</h4>
-                    <p>Auto-detects currency and date format. Supports 50+ currencies and banks worldwide.</p>
+                <div class="feature-card feature-global">
+                    <div class="feature-icon-wrap"><span>&#127758;</span></div>
+                    <h4>Any Bank, Worldwide</h4>
+                    <p>Auto-detects currency, date format, and bank. Supports 50+ currencies from ICICI to Chase to Emirates NBD.</p>
                 </div>
-                <div class="feature-card">
-                    <span class="feature-icon">&#128202;</span>
-                    <h4>Instant Insights</h4>
-                    <p>6 interactive charts, spending trends, top merchants, big transactions, and category breakdown.</p>
+                <div class="feature-card feature-insights">
+                    <div class="feature-icon-wrap"><span>&#128202;</span></div>
+                    <h4>6 Interactive Charts</h4>
+                    <p>Monthly trends, category breakdown, top merchants, big spends, refund tracking, and tag-based analysis.</p>
                 </div>
-                <div class="feature-card">
-                    <span class="feature-icon">&#128737;</span>
+                <div class="feature-card feature-security">
+                    <div class="feature-icon-wrap"><span>&#128737;</span></div>
                     <h4>PCI DSS Compliant</h4>
-                    <p>Card numbers, account details, and personal info are automatically redacted for safety.</p>
+                    <p>Card numbers masked, PII auto-redacted, 30-min inactivity wipe. Bank-grade data handling in your browser.</p>
                 </div>
             </div>
 
+            <!-- Currency Tip -->
             <div class="currency-tip">
-                <span class="tip-icon">&#128161;</span>
-                <strong>Currency not detected correctly?</strong> No worries — after uploading, use the <em>Currency</em> dropdown in the toolbar to switch to the right one. All charts and tables update instantly.
+                <span class="tip-badge">TIP</span>
+                <span><strong>Currency not right?</strong> Use the <em>Currency</em> dropdown in the toolbar after uploading. All charts and tables update instantly.</span>
+            </div>
+
+            <!-- How it works -->
+            <div class="how-it-works">
+                <h3>How it works</h3>
+                <div class="steps-row">
+                    <div class="step">
+                        <div class="step-num">1</div>
+                        <p><strong>Upload</strong><br>Drop your PDF/CSV statement</p>
+                    </div>
+                    <div class="step-arrow">&#10132;</div>
+                    <div class="step">
+                        <div class="step-num">2</div>
+                        <p><strong>Analyze</strong><br>Instant charts &amp; insights</p>
+                    </div>
+                    <div class="step-arrow">&#10132;</div>
+                    <div class="step">
+                        <div class="step-num">3</div>
+                        <p><strong>Tag &amp; Export</strong><br>Categorize, save, or export PDF</p>
+                    </div>
+                </div>
             </div>
 
             <!-- Saved Dashboards -->
@@ -346,7 +374,7 @@
         </footer>
     </div>
 
-    <script src="js/parser.js?v=8"></script>
-    <script src="js/app.js?v=8"></script>
+    <script src="js/parser.js?v=9"></script>
+    <script src="js/app.js?v=9"></script>
 </body>
 </html>
