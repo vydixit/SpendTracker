@@ -128,7 +128,6 @@ class StatementParser {
                 return;
             }
         }
-        }
         if (!this.detectedCurrency) this.detectedCurrency = 'USD';
     }
 
