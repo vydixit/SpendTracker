@@ -237,7 +237,7 @@ const app = {
                 responsive: true,
                 plugins: { legend: { display: false } },
                 scales: {
-                    y: { beginAtZero: true, ticks: { callback: v => '₹' + (v/1000).toFixed(0) + 'K' } }
+                    y: { beginAtZero: true, ticks: { callback: v => app.fmtAmtShort(v) } }
                 }
             }
         });
@@ -320,7 +320,7 @@ const app = {
             options: {
                 responsive: true,
                 scales: {
-                    y: { beginAtZero: true, ticks: { callback: v => '₹' + (v/1000).toFixed(0) + 'K' } }
+                    y: { beginAtZero: true, ticks: { callback: v => app.fmtAmtShort(v) } }
                 }
             }
         });
@@ -352,7 +352,7 @@ const app = {
                 indexAxis: 'y',
                 plugins: { legend: { display: false } },
                 scales: {
-                    x: { ticks: { callback: v => '₹' + (v/1000).toFixed(0) + 'K' } }
+                    x: { ticks: { callback: v => app.fmtAmtShort(v) } }
                 }
             }
         });
@@ -394,7 +394,7 @@ const app = {
                             label: function(ctx) {
                                 const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
                                 const pct = ((ctx.raw / total) * 100).toFixed(1);
-                                return `${ctx.label}: ₹${ctx.raw.toLocaleString('en-IN')} (${pct}%)`;
+                                return `${ctx.label}: ${app.fmtAmt(ctx.raw)} (${pct}%)`;
                             }
                         }
                     }
@@ -412,17 +412,17 @@ const app = {
             Object.entries(tagTotals).forEach(([tag, amount]) => {
                 const pct = ((amount / totalAll) * 100).toFixed(1);
                 const emoji = tag === 'Paid for Relative' ? '👨‍👩‍👧' : tag === 'Paid for Friend' ? '🤝' : '👤';
-                html += `<div>${emoji} <strong>${tag}</strong>: ₹${amount.toLocaleString('en-IN')} (${tagCounts[tag]} txns, ${pct}%)</div>`;
+                html += `<div>${emoji} <strong>${tag}</strong>: ${this.fmtAmt(amount)} (${tagCounts[tag]} txns, ${pct}%)</div>`;
             });
-            html += `<div style="margin-top:8px;color:#64748b;">🏷️ <strong>Untagged</strong>: ₹${untaggedTotal.toLocaleString('en-IN')} (${untagged.length} txns)</div>`;
-            html += `<div style="margin-top:12px;padding-top:8px;border-top:1px solid #e2e8f0;"><strong>Total Tagged</strong>: ${tagged.length} transactions worth ₹${Object.values(tagTotals).reduce((a,b)=>a+b,0).toLocaleString('en-IN')}</div>`;
+            html += `<div style="margin-top:8px;color:#64748b;">🏷️ <strong>Untagged</strong>: ${this.fmtAmt(untaggedTotal)} (${untagged.length} txns)</div>`;
+            html += `<div style="margin-top:12px;padding-top:8px;border-top:1px solid #e2e8f0;"><strong>Total Tagged</strong>: ${tagged.length} transactions worth ${this.fmtAmt(Object.values(tagTotals).reduce((a,b)=>a+b,0))}</div>`;
             summaryEl.innerHTML = html;
         }
     },
 
     updateBigTransactions() {
         const threshold = parseFloat(document.getElementById('big-threshold').value) || 5000;
-        document.getElementById('big-txn-heading').innerHTML = `🔥 Big Transactions (> ₹${threshold.toLocaleString('en-IN')})`;
+        document.getElementById('big-txn-heading').innerHTML = `🔥 Big Transactions (> ${this.formatCurrency(threshold)})`;
         const bigFiltered = this.transactions
             .filter(t => !t.isCredit && t.category !== 'Payment' && t.amount >= threshold);
         const big = this.sortRows(bigFiltered, this.sortState.big.col, this.sortState.big.dir);
@@ -434,7 +434,7 @@ const app = {
                 <td>${t.dateStr}</td>
                 <td>${t.description}</td>
                 <td>${t.category}</td>
-                <td class="amount-negative">₹${t.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td class="amount-negative">${this.fmtAmt(t.amount)}</td>
                 <td>
                     ${t.tag ? `<span class="tag tag-${t.tag === 'Paid for Relative' ? 'relative' : t.tag === 'Paid for Friend' ? 'friend' : 'self'}">${t.tag}</span>` : ''}
                     <button class="tag-btn-cell" onclick="app.openTagModal('${t.id}')">&#9999;&#65039;</button>
@@ -489,7 +489,7 @@ const app = {
                 <td>${t.description}</td>
                 <td>${t.category}</td>
                 <td class="${t.isCredit ? 'amount-positive' : 'amount-negative'}">
-                    ${t.isCredit ? '+' : ''}₹${Math.abs(t.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    ${t.isCredit ? '+' : ''}${this.fmtAmt(Math.abs(t.amount))}
                 </td>
                 <td>${t.currency}</td>
                 <td>
@@ -529,7 +529,7 @@ const app = {
                 <td>${t.dateStr}</td>
                 <td>${t.description}</td>
                 <td>${t.category}</td>
-                <td class="amount-positive">+\u20b9${Math.abs(t.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td class="amount-positive">+${this.fmtAmt(Math.abs(t.amount))}</td>
                 <td>
                     ${t.tag ? `<span class="tag tag-${t.tag === 'Paid for Relative' ? 'relative' : t.tag === 'Paid for Friend' ? 'friend' : 'self'}">${t.tag}</span>` : ''}
                     <button class="tag-btn-cell" onclick="app.openTagModal('${t.id}')">&#9999;&#65039;</button>
@@ -576,7 +576,7 @@ const app = {
                             label: function(ctx) {
                                 const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
                                 const pct = ((ctx.raw / total) * 100).toFixed(1);
-                                return `${ctx.label}: \u20b9${ctx.raw.toLocaleString('en-IN')} (${pct}%)`;
+                                return `${ctx.label}: ${app.fmtAmt(ctx.raw)} (${pct}%)`;
                             }
                         }
                     }
@@ -594,10 +594,10 @@ const app = {
             Object.entries(tagTotals).forEach(([tag, amount]) => {
                 const pct = ((amount / totalAll) * 100).toFixed(1);
                 const emoji = tag === 'Paid for Relative' ? '\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67' : tag === 'Paid for Friend' ? '\ud83e\udd1d' : '\ud83d\udc64';
-                html += `<div>${emoji} <strong>${tag}</strong>: \u20b9${amount.toLocaleString('en-IN')} (${tagCounts[tag]} refunds, ${pct}%)</div>`;
+                html += `<div>${emoji} <strong>${tag}</strong>: ${app.fmtAmt(amount)} (${tagCounts[tag]} refunds, ${pct}%)</div>`;
             });
-            html += `<div style="margin-top:8px;color:#64748b;">\ud83c\udff7\ufe0f <strong>Untagged</strong>: \u20b9${untaggedTotal.toLocaleString('en-IN')} (${untagged.length} refunds)</div>`;
-            html += `<div style="margin-top:12px;padding-top:8px;border-top:1px solid #e2e8f0;"><strong>Total Refunds</strong>: \u20b9${totalAll.toLocaleString('en-IN')} across ${refunds.length} transactions</div>`;
+            html += `<div style="margin-top:8px;color:#64748b;">\ud83c\udff7\ufe0f <strong>Untagged</strong>: ${app.fmtAmt(untaggedTotal)} (${untagged.length} refunds)</div>`;
+            html += `<div style="margin-top:12px;padding-top:8px;border-top:1px solid #e2e8f0;"><strong>Total Refunds</strong>: ${app.fmtAmt(totalAll)} across ${refunds.length} transactions</div>`;
             summaryEl.innerHTML = html;
         }
     },
@@ -629,7 +629,7 @@ const app = {
         if (!txn) return;
 
         document.getElementById('modal-txn-info').innerHTML = 
-            `<strong>${txn.description}</strong><br>₹${Math.abs(txn.amount).toLocaleString('en-IN')} on ${txn.dateStr}`;
+            `<strong>${txn.description}</strong><br>${this.fmtAmt(Math.abs(txn.amount))} on ${txn.dateStr}`;
         document.getElementById('modal-note').value = txn.note || '';
 
         // Highlight active tag
@@ -724,7 +724,7 @@ const app = {
         if (opts.big) {
             const threshold = parseFloat(document.getElementById('big-threshold').value) || 5000;
             txnSections.push({
-                title: `Big Transactions (> ₹${threshold.toLocaleString('en-IN')})`,
+                title: `Big Transactions (> ${this.formatCurrency(threshold)})`,
                 data: this.transactions.filter(t => !t.isCredit && t.category !== 'Payment' && t.amount >= threshold).sort((a, b) => b.amount - a.amount)
             });
         }
@@ -806,7 +806,7 @@ const app = {
         </style></head><body>`;
 
         html += `<h1>💰 SpendTracker Report</h1>`;
-        html += `<p style="color:#64748b;">Generated on ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })} | ${this.transactions.length} transactions</p>`;
+        html += `<p style="color:#64748b;">Generated on ${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })} | ${this.transactions.length} transactions</p>`;
 
         // Summary section
         if (opts.summary) {
@@ -858,7 +858,7 @@ const app = {
                     <td>${t.dateStr}</td>
                     <td>${this.escapeHtml(t.description)}</td>
                     <td>${t.category}</td>
-                    <td class="${t.isCredit ? 'credit' : 'debit'}">${t.isCredit ? '+' : ''}₹${Math.abs(t.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td class="${t.isCredit ? 'credit' : 'debit'}">${t.isCredit ? '+' : ''}${this.fmtAmt(Math.abs(t.amount))}</td>
                     <td>${t.tag ? `<span class="tag tag-${tagClass}">${t.tag}</span>` : ''}</td>
                     <td>${this.escapeHtml(t.note) || ''}</td>
                 </tr>`;
@@ -946,7 +946,7 @@ const app = {
 
         const dashboard = {
             name: name.substring(0, 50),
-            savedDate: new Date().toLocaleDateString('en-IN'),
+            savedDate: new Date().toLocaleDateString(),
             txnCount: sanitized.length,
             transactions: sanitized
         };
@@ -1122,7 +1122,33 @@ const app = {
 
     // Helpers
     formatCurrency(amount) {
-        return '₹' + amount.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+        const cur = this.getCurrency();
+        try {
+            return amount.toLocaleString(undefined, { style: 'currency', currency: cur, maximumFractionDigits: 0 });
+        } catch {
+            return cur + ' ' + amount.toLocaleString(undefined, { maximumFractionDigits: 0 });
+        }
+    },
+
+    getCurrency() {
+        return (this.transactions.length > 0 && this.transactions[0].currency) || 'USD';
+    },
+
+    fmtAmt(amount) {
+        // Format amount with currency symbol for table cells
+        const cur = this.getCurrency();
+        try {
+            return amount.toLocaleString(undefined, { style: 'currency', currency: cur, minimumFractionDigits: 2 });
+        } catch {
+            return cur + ' ' + amount.toLocaleString(undefined, { minimumFractionDigits: 2 });
+        }
+    },
+
+    fmtAmtShort(amount) {
+        // Short format for chart axes (e.g., $12K)
+        const symbols = { USD: '$', EUR: '€', GBP: '£', JPY: '¥', INR: '₹', KRW: '₩', CNY: '¥', CHF: 'Fr', AUD: 'A$', CAD: 'C$', SGD: 'S$', HKD: 'HK$', BRL: 'R$', ZAR: 'R', MXN: 'MX$', SEK: 'kr', NOK: 'kr', DKK: 'kr', PLN: 'zł', TRY: '₺', THB: '฿', MYR: 'RM', PHP: '₱', IDR: 'Rp', AED: 'AED', SAR: 'SAR' };
+        const sym = symbols[this.getCurrency()] || this.getCurrency() + ' ';
+        return sym + (amount/1000).toFixed(0) + 'K';
     },
 
     monthLabel(key) {

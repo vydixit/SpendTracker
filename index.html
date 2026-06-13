@@ -33,7 +33,7 @@
                 <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
                     Choose File(s)
                 </button>
-                <p class="upload-note">Supports credit card statements from most Indian banks (PDF/CSV). Upload multiple months at once!</p>
+                <p class="upload-note">Works with credit card statements from any bank worldwide (PDF/CSV). Upload multiple months at once!</p>
             </div>
 
             <!-- Saved Dashboards -->
@@ -150,10 +150,10 @@
 
             <!-- Big Transactions -->
             <div class="section-block">
-                <h3 id="big-txn-heading">&#128293; Big Transactions (> &#8377;5,000)</h3>
+                <h3 id="big-txn-heading">&#128293; Big Transactions</h3>
                 <div class="big-txn-threshold">
-                    <label>Threshold: &#8377;</label>
-                    <input type="number" id="big-threshold" value="5000" min="1000" step="1000" onchange="app.updateBigTransactions()">
+                    <label>Threshold:</label>
+                    <input type="number" id="big-threshold" value="5000" min="100" step="500" onchange="app.updateBigTransactions()">
                     <button class="btn btn-sm" onclick="app.updateBigTransactions()">Update</button>
                 </div>
                 <div id="big-transactions" class="table-wrapper"></div>

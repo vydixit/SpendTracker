@@ -1,26 +1,17 @@
 /**
  * SpendTracker - PDF Statement Parser
- * Bank-agnostic credit card statement parser
- * Supports: ICICI, HDFC, SBI, Axis, Kotak, AMEX, and most Indian bank formats
+ * Universal bank-agnostic credit card statement parser
+ * Supports banks worldwide: auto-detects date format, currency, and amount style
  */
 
 class StatementParser {
     constructor() {
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        // Date patterns supported (order matters - most specific first)
-        this.datePatterns = [
-            // DD-MMM-YY or DD-MMM-YYYY (ICICI, AMEX): 15-JAN-25, 15-JAN-2025
-            { regex: /(\d{2})-(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)-(\d{2,4})/i, type: 'dmy-alpha' },
-            // DD/MM/YYYY (HDFC, SBI, Axis): 15/01/2025
-            { regex: /(\d{2})\/(\d{2})\/(\d{4})/, type: 'dmy-slash' },
-            // DD-MM-YYYY (Kotak, some HDFC): 15-01-2025
-            { regex: /(\d{2})-(\d{2})-(\d{4})/, type: 'dmy-dash' },
-            // DD/MM/YY: 15/01/25
-            { regex: /(\d{2})\/(\d{2})\/(\d{2})/, type: 'dmy-slash-short' },
-            // MM/DD/YYYY (AMEX intl): 01/15/2025
-            { regex: /(\d{2})\/(\d{2})\/(\d{4})/, type: 'mdy-slash' },
-        ];
         this.monthMap = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
+        this.detectedCurrency = null;
+        // All ISO 4217 codes we recognize
+        this.currencyCodes = ['INR','USD','EUR','GBP','AED','CAD','AUD','SGD','HKD','JPY','CNY','CHF','SEK','NOK','DKK','NZD','ZAR','BRL','MXN','KRW','THB','MYR','PHP','IDR','TWD','PLN','CZK','HUF','TRY','SAR','QAR','KWD','BHD','OMR','EGP','LKR','BDT','PKR','NPR','ILS','RUB','UAH','RON','BGN','HRK','ISK','VND','CLP','COP','PEN','ARS'];
+        this.currencySymbols = { '$': 'USD', '€': 'EUR', '£': 'GBP', '¥': 'JPY', '₹': 'INR', '₩': 'KRW', '₪': 'ILS', '₫': 'VND', '₱': 'PHP', 'R$': 'BRL', 'RM': 'MYR', 'S$': 'SGD', 'HK$': 'HKD', 'A$': 'AUD', 'C$': 'CAD', 'NZ$': 'NZD', 'kr': 'SEK', 'Fr': 'CHF', 'zł': 'PLN', 'Kč': 'CZK', 'Ft': 'HUF', '₺': 'TRY', 'R': 'ZAR' };
     }
 
     async parsePDF(file) {
@@ -42,12 +33,16 @@ class StatementParser {
         const transactions = [];
         const fullText = text.replace(/\n/g, ' ');
 
+        // Auto-detect currency from statement text
+        this.detectCurrency(fullText);
+
         // Auto-detect which date format this statement uses
         const formatCounts = {
             'dmy-alpha': (fullText.match(/\d{2}-(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)-\d{2,4}/gi) || []).length,
             'dmy-slash': (fullText.match(/\d{2}\/\d{2}\/\d{4}/g) || []).length,
             'dmy-dash': (fullText.match(/\d{2}-\d{2}-\d{4}/g) || []).length,
             'dmy-slash-short': (fullText.match(/\d{2}\/\d{2}\/\d{2}(?!\d)/g) || []).length,
+            'ymd-dash': (fullText.match(/\d{4}-\d{2}-\d{2}/g) || []).length,
         };
 
         // Pick the format with most matches
@@ -62,6 +57,8 @@ class StatementParser {
             splitRegex = /(?=\d{2}\/\d{2}\/\d{4})/g;
         } else if (this.activeFormat === 'dmy-dash') {
             splitRegex = /(?=\d{2}-\d{2}-\d{4})/g;
+        } else if (this.activeFormat === 'ymd-dash') {
+            splitRegex = /(?=\d{4}-\d{2}-\d{2})/g;
         } else {
             splitRegex = /(?=\d{2}\/\d{2}\/\d{2}(?!\d))/g;
         }
@@ -76,6 +73,26 @@ class StatementParser {
         }
 
         return transactions;
+    }
+
+    detectCurrency(text) {
+        // Check for currency symbols first
+        for (const [sym, code] of Object.entries(this.currencySymbols)) {
+            if (text.includes(sym)) {
+                this.detectedCurrency = code;
+                return;
+            }
+        }
+        // Check for currency codes
+        const codePattern = new RegExp('\\b(' + this.currencyCodes.join('|') + ')\\b', 'g');
+        const matches = text.match(codePattern);
+        if (matches && matches.length > 0) {
+            // Pick the most frequent code
+            const freq = {};
+            matches.forEach(m => freq[m] = (freq[m] || 0) + 1);
+            this.detectedCurrency = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
+        }
+        if (!this.detectedCurrency) this.detectedCurrency = 'USD'; // default fallback
     }
 
     parseTransactionSegment(segment) {
@@ -139,6 +156,20 @@ class StatementParser {
             }
         }
 
+        // Try YYYY-MM-DD (ISO 8601 - used by many European/Asian banks)
+        if (!dateMatch) {
+            dateMatch = segment.match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (dateMatch) {
+                year = dateMatch[1];
+                month = parseInt(dateMatch[2]) - 1;
+                day = dateMatch[3];
+                date = new Date(parseInt(year), month, parseInt(day));
+                const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+                dateStr = `${day}-${monthNames[month]}-${String(year).slice(-2)}`;
+                dateLen = dateMatch[0].length;
+            }
+        }
+
         if (!dateMatch || isNaN(date.getTime())) return null;
 
         // Remove date from segment
@@ -154,17 +185,25 @@ class StatementParser {
             return null;
         }
 
-        // Try to extract amount - last number(s) in the line
-        // Formats: 1,234.56 or -1,234.56 or Cr 1,234.56 or Dr 1,234.56
-        const amountPattern = /(-?[\d,]+\.\d{2})\s*$/;
-        const amounts = [];
-        
-        // Find all potential amounts (numbers with decimals)
-        const allAmounts = rest.match(/-?[\d,]+\.\d{2}/g);
+        // Try to extract amount - supports both formats:
+        // Anglo: 1,234.56 (US/UK/India/most) or European: 1.234,56 (Germany/France/Brazil)
+        // Also handles: -1,234.56 or 1234.56 or 1234,56
+        let allAmounts = rest.match(/-?[\d,]+\.\d{2}/g); // Anglo format first
+        let isEuropean = false;
+        if (!allAmounts || allAmounts.length === 0) {
+            // Try European format: 1.234,56
+            allAmounts = rest.match(/-?[\d.]+,\d{2}/g);
+            isEuropean = true;
+        }
         if (!allAmounts || allAmounts.length === 0) return null;
 
-        // The last amount is the INR amount, second-to-last might be international amount
-        const inrAmount = parseFloat(allAmounts[allAmounts.length - 1].replace(/,/g, ''));
+        const rawAmount = allAmounts[allAmounts.length - 1];
+        let parsedAmount;
+        if (isEuropean) {
+            parsedAmount = parseFloat(rawAmount.replace(/\./g, '').replace(',', '.'));
+        } else {
+            parsedAmount = parseFloat(rawAmount.replace(/,/g, ''));
+        }
         
         // Extract reference number (long digit string) - REDACT for PCI DSS
         const refMatch = rest.match(/^(\d{20,30})/);
@@ -198,8 +237,10 @@ class StatementParser {
             }
         }
 
-        // Remove currency codes
-        description = description.replace(/\b(INR|USD|AED|LKR|EUR|GBP)\b\s*/gi, '').trim();
+        // Remove currency codes and symbols from description
+        const currencyRegex = new RegExp('\\b(' + this.currencyCodes.join('|') + ')\\b\\s*', 'gi');
+        description = description.replace(currencyRegex, '').trim();
+        description = description.replace(/[₹$€£¥₩₪₫₱₺]/g, '').trim();
         // Remove trailing "0.00" or amount patterns
         description = description.replace(/\s+0\.00\s*$/, '').trim();
         // Remove "IN" at end (country code)
@@ -219,19 +260,19 @@ class StatementParser {
         // Skip if this looks like a header
         if (description.includes('International amount') || description.includes('Amount(in')) return null;
 
-        // Detect currency
-        let currency = 'INR';
-        const currencyMatch = segment.match(/\b(USD|AED|LKR|EUR|GBP)\b/i);
-        if (currencyMatch) {
-            currency = currencyMatch[1].toUpperCase();
+        // Detect currency for this transaction (or use statement-level detected currency)
+        let currency = this.detectedCurrency || 'USD';
+        const txnCurrencyMatch = segment.match(new RegExp('\\b(' + this.currencyCodes.join('|') + ')\\b', 'i'));
+        if (txnCurrencyMatch) {
+            currency = txnCurrencyMatch[1].toUpperCase();
         }
 
-        // Detect Cr/Dr indicator (HDFC, SBI, Axis use this)
-        let isCredit = inrAmount < 0;
-        if (/\bCr\.?\s*$/i.test(rest) || /\bCR\s*$/i.test(rest)) {
+        // Detect Cr/Dr indicator (many banks worldwide use this)
+        let isCredit = parsedAmount < 0;
+        if (/\bCr\.?\s*$/i.test(rest) || /\bCR\s*$/i.test(rest) || /\bCREDIT\s*$/i.test(rest)) {
             isCredit = true;
         }
-        if (/\bDr\.?\s*$/i.test(rest)) {
+        if (/\bDr\.?\s*$/i.test(rest) || /\bDR\s*$/i.test(rest) || /\bDEBIT\s*$/i.test(rest)) {
             isCredit = false;
         }
 
@@ -241,7 +282,7 @@ class StatementParser {
             dateStr: dateStr,
             refNumber: refNumber,
             description: this.cleanDescription(description),
-            amount: Math.abs(inrAmount),
+            amount: Math.abs(parsedAmount),
             currency: currency,
             isCredit: isCredit,
             tag: '',
@@ -250,61 +291,63 @@ class StatementParser {
     }
 
     cleanDescription(desc) {
-        // Clean up common patterns
         desc = desc.replace(/\s+/g, ' ').trim();
-        desc = desc.replace(/^[\d\s]+/, '').trim(); // Remove leading numbers
-        desc = desc.replace(/httpswww\w+/gi, '').trim();
-        desc = desc.replace(/wwwamazonin/gi, '').trim();
-        desc = desc.replace(/httpchowma/gi, '').trim();
-        desc = desc.replace(/httpswwwz/gi, '').trim();
-        desc = desc.replace(/httpswwwc/gi, '').trim();
-        desc = desc.replace(/httpswwwt/gi, '').trim();
-        desc = desc.replace(/httpwwwli/gi, '').trim();
-        desc = desc.replace(/httpsshoff/gi, '').trim();
-        desc = desc.replace(/httpshaldi/gi, '').trim();
-        desc = desc.replace(/www\.irctctour/gi, '').trim();
-        desc = desc.replace(/wwwlinkedin/gi, '').trim();
-        desc = desc.replace(/wwwamazonin/gi, '').trim();
+        desc = desc.replace(/^[\d\s]+/, '').trim();
+        // Remove any URL fragments (http/https/www patterns mangled by PDF extraction)
+        desc = desc.replace(/https?[a-zA-Z0-9./\-_]*/gi, '').trim();
+        desc = desc.replace(/www[a-zA-Z0-9./\-_]*/gi, '').trim();
         // Final PII pass on cleaned description
         desc = this.redactPII(desc);
-        // Cap length
         if (desc.length > 60) desc = desc.substring(0, 60) + '...';
         return desc;
     }
 
     redactPII(text) {
-        // Bank account numbers (4-18 digits after keywords like Acc, A/c, Account)
-        text = text.replace(/\b(Acc|A\/c|Account|Acct)\s*[#:]?\s*\w{0,2}(\d{4,})\b/gi, (m, prefix) => prefix + ' ****');
+        // Bank account numbers (keywords + digits)
+        text = text.replace(/\b(Acc|A\/c|Account|Acct|Konto|Compte|Cuenta)\s*[#:]?\s*\w{0,2}(\d{4,})\b/gi, (m, prefix) => prefix + ' ****');
         
-        // Indian PAN number (ABCDE1234F format)
+        // IBAN (2 letter country + 2 check digits + up to 30 alphanumeric)
+        text = text.replace(/\b[A-Z]{2}\d{2}[A-Z0-9]{4,30}\b/g, '[IBAN REDACTED]');
+        
+        // SWIFT/BIC codes (8 or 11 chars: 4 bank + 2 country + 2 location + optional 3 branch)
+        text = text.replace(/\b[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?\b/g, (match) => {
+            // Avoid false positives on normal words - must have digits
+            if (/\d/.test(match)) return '[SWIFT REDACTED]';
+            return match;
+        });
+        
+        // US SSN (XXX-XX-XXXX)
+        text = text.replace(/\b\d{3}-\d{2}-\d{4}\b/g, '[SSN REDACTED]');
+        
+        // Indian PAN (ABCDE1234F)
         text = text.replace(/\b[A-Z]{5}\d{4}[A-Z]\b/g, '[PAN REDACTED]');
         
-        // Aadhaar number (12 digits, often written as XXXX XXXX XXXX)
+        // National ID numbers (12+ digits grouped, e.g. Aadhaar, SIN, NI number)
         text = text.replace(/\b\d{4}\s?\d{4}\s?\d{4}\b/g, (match) => {
-            // Only redact if it looks like Aadhaar (not amounts or dates)
             if (match.replace(/\s/g, '').length === 12) return '[ID REDACTED]';
             return match;
         });
         
-        // Phone numbers - Indian (10 digits starting with 6-9)
+        // Phone numbers - international format (+XX or +XXX followed by digits)
+        text = text.replace(/\+\d{1,3}[\s.-]?\(?\d{1,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}\b/g, '[PHONE REDACTED]');
+        // Phone - Indian (10 digits starting with 6-9)
         text = text.replace(/\b[6-9]\d{9}\b/g, '[PHONE REDACTED]');
-        // Phone with country code
-        text = text.replace(/\+91[\s-]?\d{10}\b/g, '[PHONE REDACTED]');
+        // Phone - North American (XXX-XXX-XXXX)
+        text = text.replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, '[PHONE REDACTED]');
         
         // Email addresses
         text = text.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[EMAIL REDACTED]');
         
-        // UPI IDs (name@bank)
+        // UPI IDs (name@bank - India specific)
         text = text.replace(/[a-zA-Z0-9._-]+@[a-zA-Z]{2,10}\b/g, (match) => {
-            // Don't redact if it looks like an email (already handled above)
             if (match.includes('.')) return match;
             return '[UPI REDACTED]';
         });
         
-        // IFSC codes (4 letters + 0 + 6 alphanumeric)
-        text = text.replace(/\b[A-Z]{4}0[A-Z0-9]{6}\b/g, '[IFSC REDACTED]');
+        // Sort codes (UK: XX-XX-XX), BSB (Australia: XXX-XXX), IFSC (India: 4+0+6)
+        text = text.replace(/\b[A-Z]{4}0[A-Z0-9]{6}\b/g, '[BANK CODE REDACTED]');
         
-        // Generic long digit sequences (potential account/ID numbers) - 10+ digits not already handled
+        // Generic long digit sequences (10+ digits - potential account/ID numbers)
         text = text.replace(/\b\d{10,18}\b/g, (match) => '****' + match.slice(-4));
         
         return text;
@@ -318,17 +361,18 @@ class StatementParser {
         const desc = description.toUpperCase();
         
         const categories = {
-            'Food & Dining': ['ZOMATO', 'SWIGGY', 'BLINKIT', 'ZEPTO', 'MC DONALD', 'STARBUCKS', 'CHAAYOS', 'DOMINO', 'KFC', 'PIZZA', 'CAFE', 'RESTAURANT', 'FOOD', 'BAKERY', 'KITCHEN', 'BIRYANI', 'CHOWMAN', 'EAZYDINER', 'BOOKMYSHOW', 'PVR', 'CINEPOLIS', 'INSTAMART', 'RAMESHWARAM', 'MANOHAR DAIRY', 'COUNTRYSIDE', 'LAVONNE', 'TOSCANO', 'PERIODIC TABLE'],
-            'Travel': ['INDIGO', 'AIR INDIA', 'MAKEMYTRIP', 'CLEARTRIP', 'ETIHAD', 'UBER', 'OLA', 'IRCTC', 'AIRBNB', 'HOTEL', 'KINGSBURY', 'RADISSON', 'HELICOPTER', 'SMVD', 'DREAMFOLKS'],
-            'Shopping': ['AMAZON', 'FLIPKART', 'MYNTRA', 'ZARA', 'H&M', 'HENNES', 'WESTSIDE', 'ZUDIO', 'RELIANCE', 'LIFESTYLE', 'RARE RABBIT', 'NIKE', 'BATA', 'FABINDIA', 'SAMYAKK', 'TITAN', 'LENSKART', 'SUNGLASS', 'FOREST ESSENTIAL', 'NYKAA', 'SNITCH', 'SABYASACHI', 'RAYMOND', 'CHANEL', 'MALABAR GOLD', 'SPARKLE GOLD', 'BLUESTONE', 'ANAND JEWELS', 'ZIMSON'],
-            'Groceries': ['INNOVATIVE RETAIL', 'RSPBLINK', 'BLINKIT', 'BIGBASKET', 'RANA RAMDEV', 'TOP IN TOWN', 'LOYAL WORLD', 'SOWPARNIKA', 'CARGILLS'],
-            'Fuel': ['FUEL', 'PETROL', 'BPCL', 'SHELL', 'FILLING STATION', 'PKV FILLING', 'RELIANCE BP', 'ADNOC', 'MATS FUEL', 'V V R FUELS', 'POURNAMI FUEL'],
-            'Health & Beauty': ['PHARMACY', 'APOLLO', 'MEDICAL', 'KAYA SKIN', 'ZEUS UNISEX', 'SALON', 'SPA', 'AVANTARA', 'ELITE SPA', 'DR DIVYA'],
-            'Electronics': ['I SHOP', 'ISHOP', 'APPLE', 'CROMA'],
-            'Bills & Utilities': ['PAYATRIA', 'ACT ATRIA', 'LIVPURE', 'MY GATE', 'PTMMY GATE', 'COMMISSIONER BBMP', 'ICICI LOMBARD', 'NATIONAL HIGHWAY', 'FASTAG', 'GATEWAY SECURITY', 'ARANYAKA'],
-            'EMI & Finance': ['AMORTIZATION', 'INTEREST', 'ANNUAL FEE', 'IGST', 'FUEL SURCHARGE', 'DCC FEE', 'ICICIPRUDENT'],
-            'International': ['DUBAI', 'COLOMBO', 'GALLE', 'FUJAIRAH', 'ABU DHABI', 'KATUNAYAKE', 'NUWARA', 'SHARJAH', 'SAN FRANCISCO'],
-            'Payment': ['INFINITY PAYMENT', 'PAYMENT RECEIVED', 'REFUND', 'CHARGEBACK']
+            'Food & Dining': ['ZOMATO', 'SWIGGY', 'BLINKIT', 'ZEPTO', 'MC DONALD', 'MCDONALD', 'STARBUCKS', 'CHAAYOS', 'DOMINO', 'KFC', 'PIZZA', 'CAFE', 'RESTAURANT', 'FOOD', 'BAKERY', 'KITCHEN', 'BIRYANI', 'CHOWMAN', 'EAZYDINER', 'BOOKMYSHOW', 'PVR', 'CINEPOLIS', 'INSTAMART', 'UBER EATS', 'DOORDASH', 'GRUBHUB', 'JUST EAT', 'DELIVEROO', 'POSTMATES', 'CHIPOTLE', 'SUBWAY', 'BURGER KING', 'WENDY', 'TACO BELL', 'DUNKIN', 'TIM HORTON', 'NANDO', 'GREGGS', 'PRET A MANGER', 'FIVE GUYS', 'CHICK-FIL-A', 'DINER', 'BISTRO', 'EATERY', 'GRILL', 'SUSHI', 'RAMEN', 'WOK', 'KEBAB'],
+            'Travel': ['INDIGO', 'AIR INDIA', 'MAKEMYTRIP', 'CLEARTRIP', 'ETIHAD', 'UBER', 'OLA', 'IRCTC', 'AIRBNB', 'HOTEL', 'RADISSON', 'DREAMFOLKS', 'AIRLINE', 'AIRWAYS', 'DELTA', 'UNITED', 'SOUTHWEST', 'JETBLUE', 'RYANAIR', 'EASYJET', 'BRITISH AIRWAY', 'LUFTHANSA', 'EMIRATES', 'QATAR', 'SINGAPORE AIR', 'CATHAY', 'QANTAS', 'AMERICAN AIR', 'HILTON', 'MARRIOTT', 'HYATT', 'IHG', 'HOLIDAY INN', 'BEST WESTERN', 'BOOKING.COM', 'EXPEDIA', 'TRIVAGO', 'KAYAK', 'SKYSCANNER', 'LYFT', 'BOLT', 'GRAB', 'GOJEK', 'DIDI', 'TRAIN', 'RAILWAY', 'AMTRAK', 'EUROSTAR', 'HERTZ', 'AVIS', 'ENTERPRISE RENT', 'PARKING'],
+            'Shopping': ['AMAZON', 'FLIPKART', 'MYNTRA', 'ZARA', 'H&M', 'HENNES', 'WESTSIDE', 'ZUDIO', 'RELIANCE', 'LIFESTYLE', 'NIKE', 'BATA', 'FABINDIA', 'TITAN', 'LENSKART', 'NYKAA', 'RAYMOND', 'CHANEL', 'WALMART', 'TARGET', 'COSTCO', 'EBAY', 'ETSY', 'SHEIN', 'ASOS', 'PRIMARK', 'UNIQLO', 'GAP', 'OLD NAVY', 'NORDSTROM', 'MACY', 'TJ MAXX', 'MARSHALLS', 'ROSS STORE', 'IKEA', 'WAYFAIR', 'ALIEXPRESS', 'TEMU', 'WISH.COM', 'SEPHORA', 'ADIDAS', 'PUMA', 'REEBOK', 'GUCCI', 'LOUIS VUITTON', 'HERMES', 'PRADA', 'TIFFANY', 'CARTIER', 'ROLEX', 'BEST BUY', 'HOME DEPOT', 'LOWE', 'JOHN LEWIS', 'MARKS SPENCER', 'TESCO', 'SAINSBURY', 'ALDI', 'LIDL', 'CARREFOUR'],
+            'Groceries': ['INNOVATIVE RETAIL', 'BLINKIT', 'BIGBASKET', 'GROCERY', 'SUPERMARKET', 'WHOLE FOODS', 'TRADER JOE', 'KROGER', 'PUBLIX', 'WEGMANS', 'SPROUTS', 'FRESH MARKET', 'SAFEWAY', 'ASDA', 'WAITROSE', 'MORRISONS', 'MERCADONA', 'REWE', 'EDEKA', 'COLES', 'WOOLWORTHS', 'INSTACART', 'FRESH DIRECT', 'OCADO', 'MARKET'],
+            'Fuel': ['FUEL', 'PETROL', 'GASOLINE', 'GAS STATION', 'BPCL', 'SHELL', 'FILLING STATION', 'ADNOC', 'EXXON', 'MOBIL', 'CHEVRON', 'BP ', 'TEXACO', 'TOTAL ENERGIES', 'ESSO', 'CALTEX', 'SINOPEC', 'PETRONAS', 'ENOC', 'EV CHARG', 'TESLA SUPERCHARG', 'CHARGEPOINT'],
+            'Health & Beauty': ['PHARMACY', 'APOLLO', 'MEDICAL', 'SALON', 'SPA', 'CVS', 'WALGREENS', 'BOOTS', 'SUPERDRUG', 'RITE AID', 'HOSPITAL', 'CLINIC', 'DOCTOR', 'DENTIST', 'DENTAL', 'OPTICIAN', 'OPTICAL', 'PHYSIOTHERAPY', 'DERMATOLOG', 'HEALTH', 'WELLNESS', 'GYM', 'FITNESS'],
+            'Electronics': ['APPLE', 'CROMA', 'BEST BUY', 'CURRYS', 'MEDIA MARKT', 'SAMSUNG', 'MICROSOFT STORE', 'B&H PHOTO', 'NEWEGG'],
+            'Subscriptions': ['NETFLIX', 'SPOTIFY', 'DISNEY', 'HULU', 'HBO', 'PRIME VIDEO', 'YOUTUBE', 'APPLE MUSIC', 'APPLE TV', 'AUDIBLE', 'KINDLE', 'ADOBE', 'MICROSOFT 365', 'GOOGLE ONE', 'DROPBOX', 'ICLOUD', 'OPENAI', 'CHATGPT', 'NOTION', 'FIGMA', 'CANVA', 'LINKEDIN PREMIUM', 'MEDIUM', 'PATREON', 'TWITCH', 'CRUNCHYROLL'],
+            'Bills & Utilities': ['ELECTRIC', 'WATER BILL', 'GAS BILL', 'INTERNET', 'BROADBAND', 'MOBILE BILL', 'PHONE BILL', 'INSURANCE', 'PAYATRIA', 'FASTAG', 'TOLL', 'COUNCIL TAX', 'PROPERTY TAX', 'RENT', 'MORTGAGE', 'CABLE', 'WIFI', 'TELECOM', 'VODAFONE', 'AT&T', 'VERIZON', 'T-MOBILE', 'COMCAST', 'SPECTRUM', 'BT GROUP', 'SKY TV', 'UTILITY'],
+            'EMI & Finance': ['AMORTIZATION', 'INTEREST', 'ANNUAL FEE', 'GST', 'IGST', 'FUEL SURCHARGE', 'DCC FEE', 'LATE FEE', 'FINANCE CHARGE', 'INSTALMENT', 'INSTALLMENT', 'EMI ', 'LOAN', 'CREDIT CARD FEE', 'FOREIGN TRANSACTION', 'SERVICE CHARGE', 'OVERLIMIT', 'MEMBERSHIP FEE'],
+            'Transfer': ['VENMO', 'ZELLE', 'PAYPAL', 'CASH APP', 'WISE', 'REVOLUT', 'GOOGLE PAY', 'APPLE PAY', 'SAMSUNG PAY', 'PAYTM', 'PHONEPE', 'UPI', 'TRANSFER', 'WIRE TRANSFER', 'ACH'],
+            'Payment': ['INFINITY PAYMENT', 'PAYMENT RECEIVED', 'REFUND', 'CHARGEBACK', 'PAYMENT THANK', 'AUTO PAY', 'AUTOPAY', 'CREDIT RECEIVED', 'REVERSAL', 'CASHBACK']
         };
 
         for (const [category, keywords] of Object.entries(categories)) {

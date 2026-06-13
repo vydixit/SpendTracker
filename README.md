@@ -6,7 +6,7 @@ Upload your PDF or CSV statement and get instant spending insights with charts, 
 
 ## Features
 
-- **PDF Parsing** - Automatically extracts transactions from most Indian bank credit card statements (PDF.js)
+- **PDF Parsing** - Automatically extracts transactions from credit card statements worldwide (PDF.js)
 - **Spending Dashboard** - Summary cards showing total spent, received back, net spend, avg monthly
 - **4 Interactive Charts** - Monthly trend, category breakdown, spent vs received, top merchants
 - **Smart Categorization** - Auto-detects categories (Food, Travel, Shopping, Fuel, etc.)
@@ -31,7 +31,7 @@ Upload your PDF or CSV statement and get instant spending insights with charts, 
 
 | Format | Bank | Status |
 |--------|------|--------|
-| PDF | ICICI, HDFC, SBI, Axis, Kotak, AMEX & more | Supported |
+| PDF | Any bank worldwide (auto-detects format) | Supported |
 | CSV | Generic (Date, Description, Amount) | Supported |
 
 ## How to Use
@@ -72,7 +72,7 @@ SpendTracker/
 ├── css/
 │   └── style.css    # All styling
 ├── js/
-│   ├── parser.js    # PDF extraction & bank-agnostic format parsing
+│   ├── parser.js    # PDF extraction & universal bank format parser
 │   └── app.js       # Dashboard, charts, filters, tagging
 └── README.md        # This file
 ```
