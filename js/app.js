@@ -1044,6 +1044,21 @@ const app = {
         location.reload();
     },
 
+    closeApp() {
+        if (this.transactions.length > 0) {
+            if (!confirm('You have an active dashboard. Close SpendTracker?')) return;
+        }
+        // Clear in-memory data
+        this.transactions = [];
+        this.filteredTransactions = [];
+        Object.values(this.charts).forEach(c => { if (c) c.destroy(); });
+        this.charts = {};
+        // Try to close the window/tab
+        window.close();
+        // If window.close() is blocked (not opened by script), show blank page
+        document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#64748b;"><div style="text-align:center"><h1>SpendTracker Closed</h1><p>You can close this tab now.</p><button onclick="location.reload()" style="margin-top:16px;padding:10px 24px;border:none;background:#4f46e5;color:#fff;border-radius:8px;cursor:pointer;font-size:1rem;">Reopen</button></div></div>';
+    },
+
     newUpload() {
         document.getElementById('dashboard').classList.add('hidden');
         document.getElementById('upload-section').classList.remove('hidden');

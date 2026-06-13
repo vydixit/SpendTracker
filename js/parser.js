@@ -1,11 +1,26 @@
 /**
  * SpendTracker - PDF Statement Parser
- * Parses ICICI Bank credit card e-statements
+ * Bank-agnostic credit card statement parser
+ * Supports: ICICI, HDFC, SBI, Axis, Kotak, AMEX, and most Indian bank formats
  */
 
 class StatementParser {
     constructor() {
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        // Date patterns supported (order matters - most specific first)
+        this.datePatterns = [
+            // DD-MMM-YY or DD-MMM-YYYY (ICICI, AMEX): 15-JAN-25, 15-JAN-2025
+            { regex: /(\d{2})-(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)-(\d{2,4})/i, type: 'dmy-alpha' },
+            // DD/MM/YYYY (HDFC, SBI, Axis): 15/01/2025
+            { regex: /(\d{2})\/(\d{2})\/(\d{4})/, type: 'dmy-slash' },
+            // DD-MM-YYYY (Kotak, some HDFC): 15-01-2025
+            { regex: /(\d{2})-(\d{2})-(\d{4})/, type: 'dmy-dash' },
+            // DD/MM/YY: 15/01/25
+            { regex: /(\d{2})\/(\d{2})\/(\d{2})/, type: 'dmy-slash-short' },
+            // MM/DD/YYYY (AMEX intl): 01/15/2025
+            { regex: /(\d{2})\/(\d{2})\/(\d{4})/, type: 'mdy-slash' },
+        ];
+        this.monthMap = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
     }
 
     async parsePDF(file) {
@@ -25,17 +40,33 @@ class StatementParser {
 
     parseStatementText(text) {
         const transactions = [];
-        const lines = text.split('\n');
-        
-        // ICICI statement date pattern: DD-MMM-YY
-        const datePattern = /(\d{2}-(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)-\d{2})/gi;
-        
-        // Process full text looking for transaction rows
-        // Pattern: DATE [REF_NUMBER] DESCRIPTION [CURRENCY] [INT_AMOUNT] AMOUNT
         const fullText = text.replace(/\n/g, ' ');
-        
-        // Split into potential transaction segments by date
-        const segments = fullText.split(/(?=\d{2}-(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)-\d{2})/gi);
+
+        // Auto-detect which date format this statement uses
+        const formatCounts = {
+            'dmy-alpha': (fullText.match(/\d{2}-(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)-\d{2,4}/gi) || []).length,
+            'dmy-slash': (fullText.match(/\d{2}\/\d{2}\/\d{4}/g) || []).length,
+            'dmy-dash': (fullText.match(/\d{2}-\d{2}-\d{4}/g) || []).length,
+            'dmy-slash-short': (fullText.match(/\d{2}\/\d{2}\/\d{2}(?!\d)/g) || []).length,
+        };
+
+        // Pick the format with most matches
+        const detectedFormat = Object.entries(formatCounts).sort((a, b) => b[1] - a[1])[0];
+        this.activeFormat = detectedFormat[0];
+
+        // Build split regex based on detected format
+        let splitRegex;
+        if (this.activeFormat === 'dmy-alpha') {
+            splitRegex = /(?=\d{2}-(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)-\d{2,4})/gi;
+        } else if (this.activeFormat === 'dmy-slash') {
+            splitRegex = /(?=\d{2}\/\d{2}\/\d{4})/g;
+        } else if (this.activeFormat === 'dmy-dash') {
+            splitRegex = /(?=\d{2}-\d{2}-\d{4})/g;
+        } else {
+            splitRegex = /(?=\d{2}\/\d{2}\/\d{2}(?!\d))/g;
+        }
+
+        const segments = fullText.split(splitRegex);
         
         for (const segment of segments) {
             const txn = this.parseTransactionSegment(segment.trim());
@@ -50,33 +81,81 @@ class StatementParser {
     parseTransactionSegment(segment) {
         if (!segment || segment.length < 10) return null;
 
-        // Match date at start
-        const dateMatch = segment.match(/^(\d{2})-(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)-(\d{2})/i);
-        if (!dateMatch) return null;
+        let day, month, year, date, dateStr, dateLen;
 
-        const day = dateMatch[1];
-        const month = dateMatch[2].toUpperCase();
-        const year = dateMatch[3];
-        
-        // Convert to full date
-        const monthMap = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
-        const fullYear = parseInt(year) > 50 ? 1900 + parseInt(year) : 2000 + parseInt(year);
-        const date = new Date(fullYear, monthMap[month], parseInt(day));
+        // Try DD-MMM-YY or DD-MMM-YYYY
+        let dateMatch = segment.match(/^(\d{2})-(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)-(\d{2,4})/i);
+        if (dateMatch) {
+            day = dateMatch[1];
+            const monthAlpha = dateMatch[2].toUpperCase();
+            month = this.monthMap[monthAlpha];
+            year = dateMatch[3];
+            const fullYear = year.length === 4 ? parseInt(year) : (parseInt(year) > 50 ? 1900 + parseInt(year) : 2000 + parseInt(year));
+            date = new Date(fullYear, month, parseInt(day));
+            dateStr = `${day}-${monthAlpha}-${String(fullYear).slice(-2)}`;
+            dateLen = dateMatch[0].length;
+        }
 
-        if (isNaN(date.getTime())) return null;
+        // Try DD/MM/YYYY
+        if (!dateMatch) {
+            dateMatch = segment.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+            if (dateMatch) {
+                day = dateMatch[1];
+                month = parseInt(dateMatch[2]) - 1;
+                year = dateMatch[3];
+                date = new Date(parseInt(year), month, parseInt(day));
+                const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+                dateStr = `${day}-${monthNames[month]}-${String(year).slice(-2)}`;
+                dateLen = dateMatch[0].length;
+            }
+        }
+
+        // Try DD-MM-YYYY
+        if (!dateMatch) {
+            dateMatch = segment.match(/^(\d{2})-(\d{2})-(\d{4})/);
+            if (dateMatch) {
+                day = dateMatch[1];
+                month = parseInt(dateMatch[2]) - 1;
+                year = dateMatch[3];
+                date = new Date(parseInt(year), month, parseInt(day));
+                const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+                dateStr = `${day}-${monthNames[month]}-${String(year).slice(-2)}`;
+                dateLen = dateMatch[0].length;
+            }
+        }
+
+        // Try DD/MM/YY
+        if (!dateMatch) {
+            dateMatch = segment.match(/^(\d{2})\/(\d{2})\/(\d{2})(?!\d)/);
+            if (dateMatch) {
+                day = dateMatch[1];
+                month = parseInt(dateMatch[2]) - 1;
+                year = dateMatch[3];
+                const fullYear = parseInt(year) > 50 ? 1900 + parseInt(year) : 2000 + parseInt(year);
+                date = new Date(fullYear, month, parseInt(day));
+                const monthNames = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+                dateStr = `${day}-${monthNames[month]}-${year}`;
+                dateLen = dateMatch[0].length;
+            }
+        }
+
+        if (!dateMatch || isNaN(date.getTime())) return null;
 
         // Remove date from segment
-        let rest = segment.substring(dateMatch[0].length).trim();
+        let rest = segment.substring(dateLen).trim();
 
         // Skip header rows and non-transaction content
         if (rest.includes('TRANSACTION DETAILS') || rest.includes('Card Number') || 
             rest.includes('Ref. Number') || rest.includes('category of service') ||
-            rest.includes('REGISTERED OFFICE') || rest.includes('Statement Period')) {
+            rest.includes('REGISTERED OFFICE') || rest.includes('Statement Period') ||
+            rest.includes('Opening Balance') || rest.includes('Closing Balance') ||
+            rest.includes('Payment Due') || rest.includes('Total Due') ||
+            rest.includes('Reward Points') || rest.includes('Page ')) {
             return null;
         }
 
         // Try to extract amount - last number(s) in the line
-        // ICICI format: amounts are like 1,234.56 or -1,234.56
+        // Formats: 1,234.56 or -1,234.56 or Cr 1,234.56 or Dr 1,234.56
         const amountPattern = /(-?[\d,]+\.\d{2})\s*$/;
         const amounts = [];
         
@@ -147,15 +226,24 @@ class StatementParser {
             currency = currencyMatch[1].toUpperCase();
         }
 
+        // Detect Cr/Dr indicator (HDFC, SBI, Axis use this)
+        let isCredit = inrAmount < 0;
+        if (/\bCr\.?\s*$/i.test(rest) || /\bCR\s*$/i.test(rest)) {
+            isCredit = true;
+        }
+        if (/\bDr\.?\s*$/i.test(rest)) {
+            isCredit = false;
+        }
+
         return {
             id: this.generateId(),
             date: date,
-            dateStr: `${day}-${month}-${year}`,
+            dateStr: dateStr,
             refNumber: refNumber,
             description: this.cleanDescription(description),
-            amount: inrAmount,
+            amount: Math.abs(inrAmount),
             currency: currency,
-            isCredit: inrAmount < 0, // Negative means credit/refund in statement
+            isCredit: isCredit,
             tag: '',
             note: ''
         };
