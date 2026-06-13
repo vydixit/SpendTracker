@@ -1,0 +1,4 @@
+saved/*.json
+*.pdf
+.DS_Store
+Thumbs.db

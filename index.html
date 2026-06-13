@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://cdnjs.cloudflare.com; worker-src blob:;">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="Referrer-Policy" content="no-referrer">
+    <title>SpendTracker - Credit Card Statement Analyzer</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <span class="logo-icon">&#128176;</span>
+                <h1>SpendTracker</h1>
+            </div>
+            <p class="tagline">Upload your credit card statement and get instant spending insights</p>
+        </header>
+
+        <!-- Upload Section -->
+        <section id="upload-section" class="upload-section">
+            <div class="upload-box" id="drop-zone">
+                <div class="upload-icon">&#128196;</div>
+                <h2>Drop your PDF statement(s) here</h2>
+                <p>or click to browse — select one or multiple files</p>
+                <input type="file" id="file-input" accept=".pdf,.csv" multiple hidden>
+                <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
+                    Choose File(s)
+                </button>
+                <p class="upload-note">Supports ICICI Bank credit card statements (PDF). Upload multiple months at once!</p>
+            </div>
+
+            <!-- Saved Dashboards -->
+            <div id="saved-dashboards" class="saved-section hidden">
+                <h3>&#128190; Saved Dashboards</h3>
+                <div id="saved-list" class="saved-list"></div>
+            </div>
+
+            <!-- Import Dashboard -->
+            <div class="import-section">
+                <p style="margin-top:16px;font-size:0.85rem;color:#64748b;">Have a saved dashboard? Import it:</p>
+                <input type="file" id="import-input" accept=".json" hidden>
+                <button class="btn btn-sm btn-secondary" onclick="document.getElementById('import-input').click()">&#128194; Import Dashboard (.json)</button>
+            </div>
+
+            <div id="loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Parsing your statement...</p>
+            </div>
+        </section>
+
+        <!-- Dashboard Section (hidden until data loaded) -->
+        <section id="dashboard" class="dashboard hidden">
+            <!-- Dashboard Actions -->
+            <div class="dashboard-actions">
+                <button class="btn btn-primary" onclick="app.saveDashboard()">&#128190; Save Dashboard</button>
+                <button class="btn btn-pdf" onclick="app.showExportModal()">&#128196; Export PDF</button>
+                <button class="btn btn-secondary" onclick="app.newUpload()">&#128196; Upload New Statement</button>
+                <button class="btn btn-sm btn-secondary" onclick="document.getElementById('import-input').click()">&#128194; Import</button>
+                <span id="save-status" class="save-status"></span>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="summary-cards">
+                <div class="card card-spent">
+                    <div class="card-icon">&#128200;</div>
+                    <div class="card-content">
+                        <h3>Total Spent</h3>
+                        <p class="card-value" id="total-spent">-</p>
+                    </div>
+                </div>
+                <div class="card card-received">
+                    <div class="card-icon">&#128179;</div>
+                    <div class="card-content">
+                        <h3>Refunds Received</h3>
+                        <p class="card-value" id="total-received">-</p>
+                    </div>
+                </div>
+                <div class="card card-net">
+                    <div class="card-icon">&#128176;</div>
+                    <div class="card-content">
+                        <h3>Net Spend (after refunds)</h3>
+                        <p class="card-value" id="net-spend">-</p>
+                    </div>
+                </div>
+                <div class="card card-avg">
+                    <div class="card-icon">&#128197;</div>
+                    <div class="card-content">
+                        <h3>Avg Monthly Spend</h3>
+                        <p class="card-value" id="avg-monthly">-</p>
+                    </div>
+                </div>
+                <div class="card card-count">
+                    <div class="card-icon">&#128221;</div>
+                    <div class="card-content">
+                        <h3>Total Transactions</h3>
+                        <p class="card-value" id="total-txns">-</p>
+                    </div>
+                </div>
+                <div class="card card-big">
+                    <div class="card-icon">&#128293;</div>
+                    <div class="card-content">
+                        <h3>Biggest Transaction</h3>
+                        <p class="card-value" id="biggest-txn">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="charts-row">
+                <div class="chart-container">
+                    <h3>Monthly Spending Trend</h3>
+                    <canvas id="monthly-chart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3>Spending by Category</h3>
+                    <canvas id="category-chart"></canvas>
+                </div>
+            </div>
+
+            <div class="charts-row">
+                <div class="chart-container">
+                    <h3>Spent vs Received Back (Monthly)</h3>
+                    <canvas id="flow-chart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3>Top Merchants</h3>
+                    <canvas id="merchant-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Tag Breakdown Chart -->
+            <div class="charts-row">
+                <div class="chart-container">
+                    <h3>&#127991; Spending by Tag</h3>
+                    <p style="font-size:0.85rem;color:#64748b;margin-bottom:12px;">Tag your transactions to see who you're spending for</p>
+                    <canvas id="tag-chart"></canvas>
+                </div>
+                <div class="chart-container" id="tag-summary-box">
+                    <h3>&#128202; Tag Summary</h3>
+                    <div id="tag-summary-stats" style="font-size:0.95rem;line-height:2;">Tag transactions to see breakdown here</div>
+                </div>
+            </div>
+
+            <!-- Big Transactions -->
+            <div class="section-block">
+                <h3 id="big-txn-heading">&#128293; Big Transactions (> &#8377;5,000)</h3>
+                <div class="big-txn-threshold">
+                    <label>Threshold: &#8377;</label>
+                    <input type="number" id="big-threshold" value="5000" min="1000" step="1000" onchange="app.updateBigTransactions()">
+                    <button class="btn btn-sm" onclick="app.updateBigTransactions()">Update</button>
+                </div>
+                <div id="big-transactions" class="table-wrapper"></div>
+            </div>
+
+            <!-- Refunds Section -->
+            <div class="section-block">
+                <h3>&#128176; Refunds and Payment Made</h3>
+                <p style="font-size:0.85rem;color:#64748b;margin-bottom:16px;">All credits, refunds, reversals and bill payments. Tag them to track details.</p>
+                <div id="refunds-table" class="table-wrapper"></div>
+            </div>
+
+            <div class="charts-row">
+                <div class="chart-container">
+                    <h3>&#128176; Refunds by Tag</h3>
+                    <p style="font-size:0.85rem;color:#64748b;margin-bottom:12px;">Tag refunds to see who returned money</p>
+                    <canvas id="refund-tag-chart"></canvas>
+                </div>
+                <div class="chart-container" id="refund-tag-summary-box">
+                    <h3>&#128202; Refund Tag Summary</h3>
+                    <div id="refund-tag-summary-stats" style="font-size:0.95rem;line-height:2;">Tag refunds to see breakdown here</div>
+                </div>
+            </div>
+
+            <!-- All Transactions Table -->
+            <div class="section-block">
+                <h3>&#128221; All Transactions</h3>
+                <div class="table-controls">
+                    <input type="text" id="search-input" placeholder="Search transactions..." oninput="app.filterTransactions()">
+                    <select id="month-filter" onchange="app.filterTransactions()">
+                        <option value="">All Months</option>
+                    </select>
+                    <select id="tag-filter" onchange="app.filterTransactions()">
+                        <option value="">All Tags</option>
+                        <option value="relative">Paid for Relative</option>
+                        <option value="friend">Paid for Friend</option>
+                        <option value="noted">Has Note</option>
+                        <option value="untagged">Untagged</option>
+                    </select>
+                    <button class="btn btn-sm btn-export" onclick="app.exportCSV()">&#128229; Export CSV</button>
+                </div>
+                <div id="transactions-table" class="table-wrapper"></div>
+            </div>
+        </section>
+
+        <!-- Tag Modal -->
+        <div id="tag-modal" class="modal hidden">
+            <div class="modal-content">
+                <h3>Tag Transaction</h3>
+                <p id="modal-txn-info"></p>
+                <div class="modal-tags">
+                    <button class="tag-btn" data-tag="relative" onclick="app.setTag('relative')">&#128106; Paid for Relative</button>
+                    <button class="tag-btn" data-tag="friend" onclick="app.setTag('friend')">&#129309; Paid for Friend</button>
+                    <button class="tag-btn" data-tag="self" onclick="app.setTag('self')">&#128100; Self</button>
+                    <button class="tag-btn tag-clear" data-tag="" onclick="app.setTag('')">&#10060; Clear Tag</button>
+                </div>
+                <div class="modal-note">
+                    <label>Note:</label>
+                    <textarea id="modal-note" placeholder="Add a note about this transaction..."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-primary" onclick="app.saveTag()">Save</button>
+                    <button class="btn btn-secondary" onclick="app.closeModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Export PDF Modal -->
+        <div id="export-modal" class="modal hidden">
+            <div class="modal-content">
+                <h3>&#128196; Export PDF Report</h3>
+                <p style="color:#64748b;margin-bottom:16px;">Choose what to include in your PDF report:</p>
+                <div class="export-options">
+                    <label class="export-option">
+                        <input type="checkbox" id="exp-summary" checked> Summary Cards (Total Spent, Refunds, Net, Avg)
+                    </label>
+                    <label class="export-option">
+                        <input type="checkbox" id="exp-all"> All Transactions
+                    </label>
+                    <label class="export-option">
+                        <input type="checkbox" id="exp-tagged"> Tagged Transactions Only
+                    </label>
+                    <label class="export-option">
+                        <input type="checkbox" id="exp-relative"> Paid for Relative Only
+                    </label>
+                    <label class="export-option">
+                        <input type="checkbox" id="exp-friend"> Paid for Friend Only
+                    </label>
+                    <label class="export-option">
+                        <input type="checkbox" id="exp-self"> Self Only
+                    </label>
+                    <label class="export-option">
+                        <input type="checkbox" id="exp-big" checked> Big Transactions
+                    </label>
+                    <label class="export-option">
+                        <input type="checkbox" id="exp-refunds"> Refunds
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-pdf" onclick="app.exportPDF()">Generate PDF</button>
+                    <button class="btn btn-secondary" onclick="app.closeExportModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <div class="security-notice">
+                <p>&#128274; <strong>PCI DSS Compliant Design</strong></p>
+                <ul>
+                    <li>No card data is transmitted over the network</li>
+                    <li>Card numbers are auto-masked (only last 4 digits shown)</li>
+                    <li>All processing happens locally in your browser</li>
+                    <li>Reference numbers are redacted in saved data</li>
+                    <li>Auto-clears from memory after 30 min of inactivity</li>
+                </ul>
+            </div>
+            <div class="footer-actions">
+                <button class="btn btn-sm btn-danger" onclick="app.clearAllData()">&#128465; Clear All Stored Data</button>
+            </div>
+            <p>SpendTracker - Open Source Credit Card Statement Analyzer | <a href="https://github.com" target="_blank">GitHub</a></p>
+            <p class="footer-note">Your data stays in your browser. Nothing is uploaded to any server.</p>
+        </footer>
+    </div>
+
+    <script src="js/parser.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
