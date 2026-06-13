@@ -76,16 +76,39 @@ class StatementParser {
     }
 
     detectCurrency(text) {
-        // Unique symbols that can't appear as substrings of normal words
+        const upper = text.toUpperCase();
+        
+        // 1. Bank name detection — most reliable signal
+        const bankCurrency = [
+            // India
+            [/ICICI|HDFC|SBI |STATE BANK|AXIS BANK|KOTAK|IDFC|YES BANK|PNB|PUNJAB NATIONAL|CANARA|UNION BANK|INDIAN BANK|BOB |BANK OF BARODA|RBL BANK|INDUSIND|FEDERAL BANK|BANDHAN/i, 'INR'],
+            // UAE
+            [/EMIRATES NBD|ENBD|ADCB|FAB |FIRST ABU DHABI|MASHREQ|DIB |DUBAI ISLAMIC|RAK BANK|RAKBANK|CBD |COMMERCIAL BANK OF DUBAI/i, 'AED'],
+            // US
+            [/CHASE|BANK OF AMERICA|WELLS FARGO|CITI BANK|CITIBANK|CAPITAL ONE|AMERICAN EXPRESS|AMEX|DISCOVER BANK|US BANK/i, 'USD'],
+            // UK
+            [/BARCLAYS|HSBC UK|LLOYDS|NATWEST|SANTANDER UK|NATIONWIDE|TSB BANK|MONZO|STARLING|REVOLUT UK/i, 'GBP'],
+            // Australia
+            [/COMMONWEALTH BANK|ANZ BANK|WESTPAC|NAB |NATIONAL AUSTRALIA/i, 'AUD'],
+            // Canada
+            [/TD CANADA|RBC |ROYAL BANK OF CANADA|SCOTIABANK|BMO |BANK OF MONTREAL|CIBC/i, 'CAD'],
+            // Singapore
+            [/DBS BANK|OCBC|UOB BANK|POSB/i, 'SGD'],
+            // Saudi
+            [/AL RAJHI|SAMBA|RIYADH BANK|BANQUE SAUDI|ALINMA/i, 'SAR'],
+        ];
+        for (const [pattern, code] of bankCurrency) {
+            if (pattern.test(upper)) { this.detectedCurrency = code; return; }
+        }
+
+        // 2. Unique currency symbols
         const safeSymbols = { '₹': 'INR', '€': 'EUR', '£': 'GBP', '¥': 'JPY', '₩': 'KRW', '₪': 'ILS', '₫': 'VND', '₱': 'PHP', '₺': 'TRY', 'zł': 'PLN', 'Kč': 'CZK', 'Ft': 'HUF' };
         for (const [sym, code] of Object.entries(safeSymbols)) {
             if (text.includes(sym)) { this.detectedCurrency = code; return; }
         }
         // Rs / Rs. — common Indian statement rendering (pdf.js often can't extract ₹ glyph)
         if (/\bRs\.?\s?\d/.test(text)) { this.detectedCurrency = 'INR'; return; }
-        // Multi-char prefixed symbols (must appear before a digit to count)
-        // Note: 'R' alone for ZAR is too ambiguous (matches "UBER 1", "TRANSFER 5", etc.)
-        // ZAR is detected via ISO code frequency check below instead
+        // 3. Multi-char prefixed symbols (must appear before a digit to count)
         const prefixedSymbols = [['R$', 'BRL'], ['HK$', 'HKD'], ['NZ$', 'NZD'], ['A$', 'AUD'], ['C$', 'CAD'], ['S$', 'SGD'], ['RM', 'MYR'], ['Fr', 'CHF'], ['kr', 'SEK']];
         for (const [sym, code] of prefixedSymbols) {
             const pat = new RegExp(sym.replace('$', '\\$') + '\\s?\\d', 'i');
@@ -93,13 +116,18 @@ class StatementParser {
         }
         // Bare $ — only if no prefixed variant matched
         if (/\$\s?\d/.test(text)) { this.detectedCurrency = 'USD'; return; }
-        // Check for currency codes by frequency
+        // 4. ISO code frequency — require at least 3 occurrences to avoid noise
         const codePattern = new RegExp('\\b(' + this.currencyCodes.join('|') + ')\\b', 'g');
         const matches = text.match(codePattern);
         if (matches && matches.length > 0) {
             const freq = {};
             matches.forEach(m => freq[m] = (freq[m] || 0) + 1);
-            this.detectedCurrency = Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
+            const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+            if (sorted[0][1] >= 3) {
+                this.detectedCurrency = sorted[0][0];
+                return;
+            }
+        }
         }
         if (!this.detectedCurrency) this.detectedCurrency = 'USD';
     }
