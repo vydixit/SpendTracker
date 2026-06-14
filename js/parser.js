@@ -14,9 +14,22 @@ class StatementParser {
         this.currencySymbols = { '$': 'USD', '€': 'EUR', '£': 'GBP', '¥': 'JPY', '₹': 'INR', '₩': 'KRW', '₪': 'ILS', '₫': 'VND', '₱': 'PHP', 'R$': 'BRL', 'RM': 'MYR', 'S$': 'SGD', 'HK$': 'HKD', 'A$': 'AUD', 'C$': 'CAD', 'NZ$': 'NZD', 'kr': 'SEK', 'Fr': 'CHF', 'zł': 'PLN', 'Kč': 'CZK', 'Ft': 'HUF', '₺': 'TRY', 'R': 'ZAR' };
     }
 
-    async parsePDF(file) {
+    async parsePDF(file, password) {
         const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const params = { data: arrayBuffer };
+        if (password) params.password = password;
+        
+        let pdf;
+        try {
+            pdf = await pdfjsLib.getDocument(params).promise;
+        } catch (err) {
+            if (err.name === 'PasswordException') {
+                const pwd = prompt(`"${file.name}" is password-protected.\nEnter the PDF password:`);
+                if (!pwd) throw new Error('Password required — upload cancelled.');
+                return this.parsePDF(file, pwd);
+            }
+            throw err;
+        }
         
         let allText = '';
         for (let i = 1; i <= pdf.numPages; i++) {
