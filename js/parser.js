@@ -224,13 +224,20 @@ class StatementParser {
         // Remove date from segment
         let rest = segment.substring(dateLen).trim();
 
+        // Strip "End of Statement" and everything after it
+        rest = rest.replace(/\*{2,}\s*End of Statement\s*\*{2,}.*/i, '').trim();
+        rest = rest.replace(/End of Statement.*/i, '').trim();
+
         // Skip header rows — only match when the line IS a header, not a merchant name
         const restUp = rest.toUpperCase();
         if (restUp.startsWith('TRANSACTION DETAILS') || restUp.startsWith('CARD NUMBER') ||
             restUp.startsWith('REF. NUMBER') || restUp.startsWith('REGISTERED OFFICE') ||
             restUp.startsWith('STATEMENT PERIOD') || restUp.startsWith('ACCOUNT SUMMARY') ||
+            restUp.startsWith('CARD NO') || restUp.startsWith('MERCHANT CATEGORY') ||
+            restUp.startsWith('AMOUNT') || restUp.startsWith('PARTICULARS') ||
             /^(OPENING|CLOSING|PREVIOUS|NEW|AVAILABLE)\s+(BALANCE|CREDIT)/i.test(rest) ||
             /^(PAYMENT DUE|TOTAL DUE|REWARD POINTS|MINIMUM PAYMENT|CREDIT LIMIT|PAGE \d)/i.test(rest) ||
+            /^(TOTAL PAYMENT|PAYMENT SUMMARY|FOR HASSLE|MAKING ONLY)/i.test(rest) ||
             rest.includes('category of service')) {
             return null;
         }
@@ -247,7 +254,14 @@ class StatementParser {
         }
         if (!allAmounts || allAmounts.length === 0) return null;
 
-        const rawAmount = allAmounts[allAmounts.length - 1];
+        // Prefer amount adjacent to Cr/Dr indicator (Indian bank format)
+        let rawAmount;
+        const crDrMatch = rest.match(/(-?[\d,]+\.\d{2})\s*(?:Cr|Dr)\b/i);
+        if (crDrMatch) {
+            rawAmount = crDrMatch[1];
+        } else {
+            rawAmount = allAmounts[allAmounts.length - 1];
+        }
         let parsedAmount;
         if (isEuropean) {
             parsedAmount = parseFloat(rawAmount.replace(/\./g, '').replace(',', '.'));
@@ -318,11 +332,12 @@ class StatementParser {
         }
 
         // Detect Cr/Dr indicator (many banks worldwide use this)
+        // Check both end-of-line AND adjacent to amount (e.g., "2,580.23 Cr")
         let isCredit = parsedAmount < 0;
-        if (/\bCr\.?\s*$/i.test(rest) || /\bCR\s*$/i.test(rest) || /\bCREDIT\s*$/i.test(rest)) {
+        if (/\bCr\.?\s*$/i.test(rest) || /\bCREDIT\s*$/i.test(rest) || /[\d,.]+\s*Cr\b/i.test(rest)) {
             isCredit = true;
         }
-        if (/\bDr\.?\s*$/i.test(rest) || /\bDR\s*$/i.test(rest) || /\bDEBIT\s*$/i.test(rest)) {
+        if (/\bDr\.?\s*$/i.test(rest) || /\bDEBIT\s*$/i.test(rest) || /[\d,.]+\s*Dr\b/i.test(rest)) {
             isCredit = false;
         }
 
@@ -356,8 +371,9 @@ class StatementParser {
         // Bank account numbers (keywords + digits)
         text = text.replace(/\b(Acc|A\/c|Account|Acct|Konto|Compte|Cuenta)\s*[#:]?\s*\w{0,2}(\d{4,})\b/gi, (m, prefix) => prefix + ' ****');
         
-        // IBAN (2 letter country + 2 check digits + up to 30 alphanumeric)
-        text = text.replace(/\b[A-Z]{2}\d{2}[A-Z0-9]{4,30}\b/g, '[IBAN REDACTED]');
+        // IBAN — require known country code prefix + check digits + 10-30 BBAN chars
+        // Only matches real IBAN patterns, avoids false positives on transaction refs like DP016093...
+        text = text.replace(/\b(AL|AD|AT|AZ|BH|BY|BE|BA|BR|BG|CR|HR|CY|CZ|DK|DO|TL|EE|FO|FI|FR|GE|DE|GI|GR|GL|GT|HU|IS|IQ|IE|IL|IT|JO|KZ|XK|KW|LV|LB|LI|LT|LU|MK|MT|MR|MU|MC|MD|ME|NL|NO|PK|PS|PL|PT|QA|RO|LC|SM|ST|SA|RS|SC|SK|SI|ES|SD|SE|CH|TN|TR|UA|AE|GB|VA|VG)\d{2}[A-Z0-9]{10,30}\b/g, '[IBAN REDACTED]');
         
         // SWIFT/BIC codes (8 or 11 chars: 4 bank + 2 country + 2 location + optional 3 branch)
         text = text.replace(/\b[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?\b/g, (match) => {
